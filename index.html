@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cascading Galton Board Convolution Simulator</title>
+    <style>
+        body { margin: 0; background-color: #111; color: #eee; font-family: monospace; overflow: hidden; }
+        #ui { position: absolute; top: 10px; left: 10px; background: rgba(0, 0, 0, 0.8); padding: 15px; border-radius: 5px; border: 1px solid #333; max-width: 400px; }
+        h1 { font-size: 14px; margin: 0 0 10px 0; color: #00ffcc; }
+        .stat { margin: 5px 0; font-size: 12px; }
+        button { background: #222; color: #00ffcc; border: 1px solid #00ffcc; padding: 5px 10px; cursor: pointer; margin-top: 10px; font-family: monospace; }
+        button:hover { background: #00ffcc; color: #111; }
+    </style>
+    <script async src="https://unpkg.com"></script>
+    <script type="importmap">
+      { "imports": { "ogl": "https://jsdelivr.net" } }
+    </script>
+</head>
+<body>
+    <a href="https://github.com/ZacharyWartell/galton-board-brownian-motion-diffusion-quantum-physics/">galton-board-brownian-motion-diffusion-quantum-physics</a> © 2026 by <a href="https://www.zacharywartell.net/">Zachary Wartell</a> is licensed under <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">CC BY-NC-SA 4.0</a><img src="https://mirrors.creativecommons.org/presskit/icons/cc.svg" alt="" style="max-width: 1em;max-height:1em;margin-left: .2em;"><img src="https://mirrors.creativecommons.org/presskit/icons/by.svg" alt="" style="max-width: 1em;max-height:1em;margin-left: .2em;"><img src="https://mirrors.creativecommons.org/presskit/icons/nc.svg" alt="" style="max-width: 1em;max-height:1em;margin-left: .2em;"><img src="https://mirrors.creativecommons.org/presskit/icons/sa.svg" alt="" style="max-width: 1em;max-height:1em;margin-left: .2em;">
+    <div id="ui">
+        <h1>Galton Board Cascade (1D Convolution)</h1>
+        <div class="stat">Total Balls (N): <span id="stat-n">1,000</span></div>
+        <div class="stat">Current Level (n): <span id="stat-level">0</span></div>
+        <div class="stat">Total Slots: <span id="stat-slots">100</span></div>
+        <div class="stat" style="color: #ff5555;">Max Balls in a Slot: <span id="stat-max">0</span></div>
+        <button id="btn-step">Trigger Next Level Convolution</button>
+        <button id="btn-reset">Reset to Level 0</button>
+    </div>
+    <script type="module">
+        import { Renderer, Geometry, Program, Mesh } from 'ogl';
+        const TOTAL_BALLS = 1000, MAX_SLOTS = 2000;
+        let currentLevel = 0, slots = new Float32Array(MAX_SLOTS);
+        function resetSimulation() {
+            currentLevel = 0; slots.fill(0);
+            const center = Math.floor(MAX_SLOTS / 2), initialWidth = 20;
+            let assignedBalls = 0;
+            for (let i = -initialWidth; i <= initialWidth; i++) {
+                const weight = Math.exp(-(Math.pow(Math.abs(i)/initialWidth),2) * 4);
+                const ballCount = Math.floor(weight * 35);
+                slots[center + i] = ballCount; assignedBalls += ballCount;
+            }
+            slots[center] += (TOTAL_BALLS - assignedBalls);
+            updateUI();
+        }
+        function convolveLevel() {
+            const nextSlots = new Float32Array(MAX_SLOTS);
+            const kernel = [0.25, 0.5, 0.25];
+            for (let i = 1; i < MAX_SLOTS - 1; i++) {
+                if (slots[i] > 0) {
+                    nextSlots[i - 1] += slots[i] * kernel[0];
+                    nextSlots[i]     += slots[i] * kernel[1];
+                    nextSlots[i + 1] += slots[i] * kernel[2];
+                }
+            }
+            slots = nextSlots; currentLevel++; updateUI();
+        }
+        function updateUI() {
+            document.getElementById('stat-level').innerText = currentLevel;
+            let activeSlots = 0, maxBalls = 0, firstActive = -1, lastActive = -1;
+            for(let i = 0; i < MAX_SLOTS; i++) {
+                if (slots[i] > 0) {
+                    if (firstActive === -1) firstActive = i;
+                    lastActive = i;
+                    if (slots[i] > maxBalls) maxBalls = slots[i];
+                }
+            }
+            document.getElementById('stat-slots').innerText = lastActive - firstActive;
+            document.getElementById('stat-max').innerText = maxBalls.toFixed(2);
+        }
+        const renderer = new Renderer({ antialias: true }), gl = renderer.gl;
+        document.body.appendChild(gl.canvas);
+        window.addEventListener('resize', () => renderer.setSize(window.innerWidth, window.innerHeight));
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        const positionData = new Float32Array(MAX_SLOTS * 2);
+        for (let i = 0; i < MAX_SLOTS; i++) {
+            positionData[i * 2] = ((i / MAX_SLOTS) * 2) - 1;
+            positionData[i * 2 + 1] = -0.5;
+        }
+        const geometry = new Geometry(gl, { position: { size: 2, data: positionData } });
+        const program = new Program(gl, {
+            vertex: `attribute vec2 position; varying vec2 vPos; void main() { vPos = position; gl_Position = vec4(position, 0.0, 1.0); }`,
+            fragment: `precision highp float; varying vec2 vPos; void main() { vec3 color = vec3(0.0, 1.0, 0.8) * (1.0 - abs(vPos.x)); gl_FragColor = vec4(color, 1.0); }`,
+            mode: gl.LINE_STRIP
+        });
+        const mesh = new Mesh(gl, { geometry, program });
+        document.getElementById('btn-step').addEventListener('click', convolveLevel);
+        document.getElementById('btn-reset').addEventListener('click', resetSimulation);
+        resetSimulation();
+        function update() {
+            requestAnimationFrame(update);
+            for (let i = 0; i < MAX_SLOTS; i++) positionData[i * 2 + 1] = Math.min(0.9, -0.5 + (slots[i] / TOTAL_BALLS) * 4.0);
+            geometry.attributes.position.update = true;
+            renderer.render({ scene: mesh });
+        }
+        requestAnimationFrame(update);
+    </script>
+</body>
+</html>
