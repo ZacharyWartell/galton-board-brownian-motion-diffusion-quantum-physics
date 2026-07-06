@@ -13,9 +13,11 @@
         button:hover { background: #00ffcc; color: #111; }
     </style>
     <script async src="https://unpkg.com"></script>
+    <!-- 
     <script type="importmap">
       { "imports": { "ogl": "https://jsdelivr.net" } }
     </script>
+    -->
 </head>
 <body>
     <a href="https://github.com/ZacharyWartell/galton-board-brownian-motion-diffusion-quantum-physics/">galton-board-brownian-motion-diffusion-quantum-physics</a> © 2026 by <a href="https://www.zacharywartell.net/">Zachary Wartell</a> is licensed under <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">CC BY-NC-SA 4.0</a><img src="https://mirrors.creativecommons.org/presskit/icons/cc.svg" alt="" style="max-width: 1em;max-height:1em;margin-left: .2em;"><img src="https://mirrors.creativecommons.org/presskit/icons/by.svg" alt="" style="max-width: 1em;max-height:1em;margin-left: .2em;"><img src="https://mirrors.creativecommons.org/presskit/icons/nc.svg" alt="" style="max-width: 1em;max-height:1em;margin-left: .2em;"><img src="https://mirrors.creativecommons.org/presskit/icons/sa.svg" alt="" style="max-width: 1em;max-height:1em;margin-left: .2em;">
@@ -29,7 +31,8 @@
         <button id="btn-reset">Reset to Level 0</button>
     </div>
     <script type="module">
-        import { Renderer, Geometry, Program, Mesh } from 'ogl';
+        //import { Renderer, Geometry, Program, Mesh } from 'ogl';
+        import { Renderer, Geometry, Program, Mesh } from 'https://cdn.jsdelivr.net/npm/ogl';
         const TOTAL_BALLS = 1000, MAX_SLOTS = 2000;
         let currentLevel = 0, slots = new Float32Array(MAX_SLOTS);
         function resetSimulation() {
