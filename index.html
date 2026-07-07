@@ -94,31 +94,73 @@
         //import { Renderer, Geometry, Program, Mesh } from 'https://cdn.jsdelivr.net/npm/ogl';
         //import { Renderer, Geometry, Program, Mesh } from 'https://unpkg.com/ogl';               
         import { Renderer, Geometry, Program, Mesh } from 'ogl';
-        const TOTAL_BALLS = 1000, MAX_SLOTS = 2000;
+        
+        const TOTAL_BALLS = 1000, MAX_SLOTS = 4000;
+        class GaltonBoard
+        {
+
+            static PEG_LAYERS_PER_LEVEL=10;
+
+            constructor()
+            {
+
+            }
+        }
         let currentLevel = 0, slots = new Float32Array(MAX_SLOTS);
+        const ballCapacities = new Float32Array(MAX_SLOTS);
+
+        let width = 20;
+        const sigma = width / Math.sqrt(8);
+        /*
+        Set peakAmplitude 
+
+        From https://en.wikipedia.org/wiki/Normal_distribution
+
+             pdf(x) = A exp ( - ((x - u)^2)/(2*sigma^2) )
+
+        A ("peakAmplitude") is 1 / sqrt(2*pi*sigma^2)
+        
+        The area under a continuous Gaussian curve equals \(A \cdot \sigma \sqrt{2\pi}\). 
+        The area under the curve should sum to the TOTAL_BALLS, solving for A ("peakAmplitude")
+        */
+        const peakAmplitude = TOTAL_BALLS / (sigma * Math.sqrt(2 * Math.PI));
+
+        const PEG_LAYERS_PER_LEVEL=10;   // LAYERS of PEGS of one level of Galton Board (\todo chosen arbitrarily through UI)
+        let inputSlotCount=1;
+        let outputSlotCount=(PEG_LAYERS_PER_LEVEL)*(currentLevel+1);
+        
+
         function resetSimulation() {
             currentLevel = 0; slots.fill(0);
-            const center = Math.floor(MAX_SLOTS / 2), initialWidth = 20;
+            const center = Math.floor(MAX_SLOTS / 2);//, initialWidth = 20;
             let assignedBalls = 0;
-            for (let i = -initialWidth; i <= initialWidth; i++) {
-                const weight = Math.exp(-Math.pow(Math.abs(i)/initialWidth,2) * 4);
-                const ballCount = Math.floor(weight * 35);
-                slots[center + i] = ballCount; assignedBalls += ballCount;
+            for (let i = -width; i <= width; i++) {
+                //const weight = Math.exp(-Math.pow(Math.abs(i)/width,2) * 4);
+                const weight = Math.exp(-((Math.abs(i)/width)**2) * 4);
+                                        
+                const ballCount = Math.floor(weight * peakAmplitude);
+                slots[center + i] = ballCount; 
+                assignedBalls += ballCount;
             }
-            slots[center] += (TOTAL_BALLS - assignedBalls);
+            //slots[center] += (TOTAL_BALLS - assignedBalls);
             updateUI();
         }
         function convolveLevel() {
             const nextSlots = new Float32Array(MAX_SLOTS);
             const kernel = [0.25, 0.5, 0.25];
             for (let i = 1; i < MAX_SLOTS - 1; i++) {
-                if (slots[i] > 0) {
+                if (slots[i] > 0) 
+                {
                     nextSlots[i - 1] += slots[i] * kernel[0];
                     nextSlots[i]     += slots[i] * kernel[1];
                     nextSlots[i + 1] += slots[i] * kernel[2];
                 }
             }
             slots = nextSlots; currentLevel++; updateUI();
+            //ballCapacities = nextSlots;
+
+            inputSlotCount=outputSlotCount;
+            outputSlotCount=(PEG_LAYERS_PER_LEVEL)*(currentLevel+1);
         }
         function updateUI() {
             document.getElementById('stat-level').innerText = currentLevel;
@@ -135,17 +177,38 @@
         }
         const renderer = new Renderer({ antialias: true }), gl = renderer.gl;
         document.body.appendChild(gl.canvas);
+        gl.clearColor(1,1,1,1);
         window.addEventListener('resize', () => renderer.setSize(window.innerWidth, window.innerHeight));
         renderer.setSize(window.innerWidth, window.innerHeight);
         const positionData = new Float32Array(MAX_SLOTS * 2);
+        
         for (let i = 0; i < MAX_SLOTS; i++) {
             positionData[i * 2] = ((i / MAX_SLOTS) * 2) - 1;
             positionData[i * 2 + 1] = -0.5;
+            ballCapacities [i] = 0;
         }
-        const geometry = new Geometry(gl, { position: { size: 2, data: positionData } });
+        const geometry = new Geometry(gl, { position: { size: 2, data: positionData }, ballCapacity: { size: 1, data : ballCapacities } });
         const program = new Program(gl, {
-            vertex: `attribute vec2 position; varying vec2 vPos; void main() { vPos = position; gl_Position = vec4(position, 0.0, 1.0); }`,
-            fragment: `precision highp float; varying vec2 vPos; void main() { vec3 color = vec3(0.0, 1.0, 0.8) * (1.0 - abs(vPos.x)); gl_FragColor = vec4(color, 1.0); }`           
+            vertex: `
+                attribute vec2 position; 
+                attribute float ballCapacity; 
+                varying vec2 vPos; 
+                varying float ballCapacityV; 
+                void main() 
+                    { 
+                    ballCapacityV = ballCapacity; 
+                    vPos = position; 
+                    gl_Position = vec4(position, 0.0, 1.0); 
+                    }`,
+            fragment: `
+                precision highp float; 
+                varying vec2 vPos; 
+                varying float ballCapacityV; 
+                void main() 
+                    { 
+                    vec3 color = vec3(ballCapacityV, 0, 0); 
+                    gl_FragColor = vec4(color, 1.0); 
+                    }`           
         });
         const mesh = new Mesh(gl, { mode: gl.LINE_STRIP, geometry, program });
         document.getElementById('btn-step').addEventListener('click', convolveLevel);
@@ -154,10 +217,16 @@
         function update() {
             requestAnimationFrame(update);
             for (let i = 0; i < MAX_SLOTS; i++) 
+            {
                 positionData[i * 2 + 1] = Math.min(0.9, -0.5 + (slots[i] / TOTAL_BALLS) * 4.0);
-            
+                ballCapacities[i] = (slots[i] / TOTAL_BALLS)*currentLevel;
+            }   
+                            
             const positionAttribute = geometry.attributes.position;
-            geometry.updateAttribute(positionAttribute )
+            geometry.updateAttribute(positionAttribute );
+            const ballCapacityAttribute = geometry.attributes.ballCapacity;
+            geometry.updateAttribute(ballCapacityAttribute);            
+
             renderer.render({ scene: mesh });
         }
         requestAnimationFrame(update);
